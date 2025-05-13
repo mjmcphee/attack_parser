@@ -1,4 +1,4 @@
-# Guide: ATT&CK Parser - Extract and Visualize TTPs from Threat Intelligence
+# ATT&CK Parser - Extract and Visualize TTPs from Threat Intelligence
 
 ## Overview
 
