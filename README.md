@@ -51,28 +51,62 @@ python attack_parser.py --file threat_intel.txt --score 50
 python attack_parser.py --text "The threat actor leveraged T1566.001 and TA0001 in their campaign" --score 100
 ```
 
-### Command Line Arguments
+# Command Line Arguments for ATT&CK Parser
 
 ```
---url URL                URL of the threat intelligence blog/post
---file FILE              Local file containing threat intelligence
---text TEXT              Direct text input containing threat intelligence
---score SCORE            Score to assign to found techniques (default: 100)
---title TITLE            Custom title for the Navigator layer
---output OUTPUT          Output file name (default: attack_navigator_layer.json)
---attack-version VERSION MITRE ATT&CK version to use (default: 17)
+usage: attack_parser.py [-h] (--url URL | --file FILE | --text TEXT)
+                       [--score SCORE] [--title TITLE] [--output OUTPUT]
+                       [--attack-version ATTACK_VERSION] [--force-html-mode]
+                       [--force-text-mode]
+
+Extract MITRE ATT&CK TTPs from threat intelligence and create ATT&CK Navigator layer
+
+options:
+  -h, --help            show this help message and exit
+  --url URL             URL of the threat intelligence blog/post
+  --file FILE           Local file containing threat intelligence
+  --text TEXT           Direct text input containing threat intelligence
+  --score SCORE         Score to assign to found techniques (default: 100)
+  --title TITLE         Custom title for the Navigator layer (overrides automatic title)
+  --output OUTPUT       Output file name (default: attack_navigator_layer.json)
+  --attack-version ATTACK_VERSION
+                        MITRE ATT&CK version to use (default: 17)
+  --force-html-mode     Force HTML parsing mode (override auto-detection)
+  --force-text-mode     Force text parsing mode (override auto-detection)
 ```
 
-### Example Workflow
+## Example Usage
 
-1. Find an interesting threat intelligence report online
-2. Run the script with the URL:
-   ```bash
-   python attack_parser.py --url https://example.com/threat-report --score 50 --attack-version 17
-   ```
-3. Upload the generated `attack_navigator_layer.json` file to [MITRE ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/)
-4. Analyze the visualized techniques and tactics
+```bash
+# Basic usage with a URL (auto-detects parsing mode)
+python attack_parser.py --url https://example.com/threat-report
 
+# Parse a URL and specify a custom score
+python attack_parser.py --url https://example.com/threat-report --score 75
+
+# Parse a URL, set a custom score and output filename
+python attack_parser.py --url https://example.com/threat-report --score 50 --output acme_threat_layer.json
+
+# Parse a URL with a custom title
+python attack_parser.py --url https://example.com/threat-report --title "ACME Corp Threat Analysis"
+
+# Force HTML parsing mode (for sites where auto-detection might not work)
+python attack_parser.py --url https://example.com/threat-report --force-html-mode
+
+# Force text parsing mode (for sites where you want to ignore HTML structure)
+python attack_parser.py --url https://example.com/threat-report --force-text-mode
+
+# Parse a local file
+python attack_parser.py --file threat_report.txt --score 75
+
+# Parse direct text input
+python attack_parser.py --text "Attackers used T1566.001 and TA0001 in their campaign" --score 90
+
+# Use a specific ATT&CK version
+python attack_parser.py --url https://example.com/threat-report --attack-version 16
+```
+
+The script will automatically detect whether to use HTML parsing mode (for sites with techniques in hyperlinks like CISA) or text parsing mode, but you can override this behavior with the `--force-html-mode` or `--force-text-mode` flags if needed.
 ## Tips for Best Results
 
 - Run the script on reports that explicitly mention technique IDs (T####) or tactic IDs (TA####)
