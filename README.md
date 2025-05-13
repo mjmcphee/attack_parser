@@ -68,7 +68,7 @@ python attack_parser.py --text "The threat actor leveraged T1566.001 and TA0001 
 1. Find an interesting threat intelligence report online
 2. Run the script with the URL:
    ```bash
-   python attack_parser.py --url https://example.com/threat-report
+   python attack_parser.py --url https://example.com/threat-report --score 50 --attack-version 17
    ```
 3. Upload the generated `attack_navigator_layer.json` file to [MITRE ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/)
 4. Analyze the visualized techniques and tactics
