@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import time
+import random
 
 def get_mitre_attack_data(version=17):
     """
@@ -64,19 +65,51 @@ def fetch_url_content_and_detect_mode(url, attack_data):
     """
     Fetch content from a URL, determine the best parsing mode, and extract content
     """
+    # More realistic browser headers to avoid bot detection
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0"
     }
+    
+    # Add a small random delay to appear more human-like
+    import random
+    delay = random.uniform(1, 3)  # Random delay between 1-3 seconds
+    print(f"Waiting {delay:.1f} seconds before request...")
+    time.sleep(delay)
     
     try:
         print(f"Fetching content from {url}...")
-        response = requests.get(url, headers=headers, timeout=30)
+        # Use a session to maintain cookies/state like a real browser
+        session = requests.Session()
+        session.headers.update(headers)
+        
+        # Start with a reasonable timeout - most sites should respond within 30s
+        response = session.get(url, timeout=30)
+        
         if response.status_code != 200:
             print(f"Error: Failed to fetch URL. Status code: {response.status_code}")
             return None
+            
     except requests.exceptions.Timeout:
-        print(f"Error: Request timed out when trying to fetch {url}")
+        print(f"Request timed out after 30 seconds. The server may be slow or blocking automated requests.")
+        print("Try again later or consider using a different approach.")
         return None
+        
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection error: {e}")
+        print("This could indicate network issues or the server is blocking requests.")
+        return None
+        
     except requests.exceptions.RequestException as e:
         print(f"Error: {e}")
         return None
@@ -291,11 +324,11 @@ def create_navigator_json(found_items, score, source_info=None):
         "techniques": [],
         "gradient": {
             "colors": [
-                "#ffffff00",
-                "#fc0000ff"
+                "#ffffff",
+                "#fc0000"
             ],
             "minValue": 0,
-            "maxValue": 5
+            "maxValue": 100
         },
         "legendItems": [],
         "metadata": [],
@@ -400,10 +433,27 @@ def main():
             result = html_result
         elif args.force_text_mode:
             print("Text parsing mode forced by user...")
-            # Use standard text extraction
-            response = requests.get(args.url, headers={"User-Agent": "Mozilla/5.0"})
-            if response.status_code != 200:
-                print(f"Error: Could not fetch content from {args.url}")
+            # Use standard text extraction with human-like behavior
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Connection": "keep-alive"
+            }
+            
+            # Add a small delay to be respectful
+            time.sleep(random.uniform(1, 2))
+            
+            try:
+                response = requests.get(args.url, headers=headers, timeout=30)
+                if response.status_code != 200:
+                    print(f"Error: Could not fetch content from {args.url}")
+                    return
+            except requests.exceptions.Timeout:
+                print(f"Error: Request timed out. Server may be slow or blocking automated requests.")
+                return
+            except requests.exceptions.RequestException as e:
+                print(f"Error: {e}")
                 return
                 
             soup = BeautifulSoup(response.text, 'html.parser')
