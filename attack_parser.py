@@ -291,11 +291,11 @@ def create_navigator_json(found_items, score, source_info=None):
         "techniques": [],
         "gradient": {
             "colors": [
-                "#ffffff",
-                "#ff6666"
+                "#ffffff00",
+                "#fc0000ff"
             ],
             "minValue": 0,
-            "maxValue": 100
+            "maxValue": 5
         },
         "legendItems": [],
         "metadata": [],
