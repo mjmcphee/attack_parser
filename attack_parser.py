@@ -324,11 +324,11 @@ def create_navigator_json(found_items, score, source_info=None):
         "techniques": [],
         "gradient": {
             "colors": [
-                "#ffffff",
-                "#fc0000"
+                "#ffffff00",
+                "#ff0000"
             ],
             "minValue": 0,
-            "maxValue": 100
+            "maxValue": 5
         },
         "legendItems": [],
         "metadata": [],
@@ -390,7 +390,7 @@ def main():
     group.add_argument("--url", help="URL of the threat intelligence blog/post")
     group.add_argument("--file", help="Local file containing threat intelligence")
     group.add_argument("--text", help="Direct text input containing threat intelligence")
-    parser.add_argument("--score", type=int, default=100, help="Score to assign to found techniques (default: 100)")
+    parser.add_argument("--score", type=int, default=5, help="Score to assign to found techniques (default: 5)")
     parser.add_argument("--title", help="Custom title for the Navigator layer (overrides automatic title)")
     parser.add_argument("--output", default="attack_navigator_layer.json", help="Output file name (default: attack_navigator_layer.json)")
     parser.add_argument("--attack-version", type=int, default=17, help="MITRE ATT&CK version to use (default: 17)")
