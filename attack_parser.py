@@ -7,21 +7,32 @@ from urllib.parse import urlparse
 import time
 import random
 
-def get_mitre_attack_data(version=17):
+def get_mitre_attack_data(version=18):
     """
     Fetch the MITRE ATT&CK Enterprise matrix data for a specific version
+    Supports both v17 and earlier (STIX 2.0 from mitre/cti) and v18+ (STIX 2.1 from mitre-attack/attack-stix-data)
     """
-    # The correct URL format for the GitHub repository
-    url = f"https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v{version}.0/enterprise-attack/enterprise-attack.json"
-    
-    response = requests.get(url)
-    
+    # Version 18 and later use the new mitre-attack/attack-stix-data repository with STIX 2.1
+    if version >= 18:
+        # Try with .1 patch version first (e.g., 18.1), fall back to .0 if not found
+        url = f"https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack-{version}.1.json"
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            # Try .0 version
+            url = f"https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack-{version}.0.json"
+            response = requests.get(url)
+    else:
+        # Version 17 and earlier use the old mitre/cti repository with STIX 2.0
+        url = f"https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v{version}.0/enterprise-attack/enterprise-attack.json"
+        response = requests.get(url)
+
     # Check if the response is successful
     if response.status_code != 200:
         print(f"Error: Failed to fetch ATT&CK data. Status code: {response.status_code}")
         print(f"URL attempted: {url}")
         raise Exception(f"Failed to fetch ATT&CK data from {url}")
-    
+
     try:
         data = response.json()
         return parse_attack_data(data)
@@ -277,20 +288,21 @@ def parse_text_for_identifiers(text, attack_data):
     
     return {"techniques": found_techniques, "tactics": found_tactics}
 
-def create_navigator_json(found_items, score, source_info=None):
+def create_navigator_json(found_items, score, source_info=None, attack_version=18):
     """
-    Create the ATT&CK Navigator JSON with the found techniques for ATT&CK v17
+    Create the ATT&CK Navigator JSON with the found techniques
+    Supports multiple ATT&CK versions (v17 and v18+)
     """
     # Set the title - use source title if available, otherwise default
     title = "TTP Analysis"
     if source_info and source_info.get("title"):
         title = source_info["title"]
-    
+
     navigator_json = {
         "name": title,
         "versions": {
-            "attack": "17",
-            "navigator": "4.9.1",
+            "attack": str(attack_version),
+            "navigator": "5.2.0",
             "layer": "4.5"
         },
         "domain": "enterprise-attack",
@@ -393,7 +405,7 @@ def main():
     parser.add_argument("--score", type=int, default=5, help="Score to assign to found techniques (default: 5)")
     parser.add_argument("--title", help="Custom title for the Navigator layer (overrides automatic title)")
     parser.add_argument("--output", default="attack_navigator_layer.json", help="Output file name (default: attack_navigator_layer.json)")
-    parser.add_argument("--attack-version", type=int, default=17, help="MITRE ATT&CK version to use (default: 17)")
+    parser.add_argument("--attack-version", type=int, default=18, help="MITRE ATT&CK version to use (default: 18)")
     parser.add_argument("--force-html-mode", action="store_true", help="Force HTML parsing mode (override auto-detection)")
     parser.add_argument("--force-text-mode", action="store_true", help="Force text parsing mode (override auto-detection)")
     
@@ -531,7 +543,7 @@ def main():
     
     # Create Navigator JSON
     print(f"Found {len(found_items['techniques'])} techniques and {len(found_items['tactics'])} tactics. Creating Navigator layer...")
-    navigator_json = create_navigator_json(found_items, args.score, source_info)
+    navigator_json = create_navigator_json(found_items, args.score, source_info, args.attack_version)
     
     # Write to file
     with open(args.output, 'w', encoding='utf-8') as f:
