@@ -282,6 +282,22 @@ def fetch_url_content_and_detect_mode(url, attack_data):
         "html_mode_used": html_mode_needed
     }
 
+def sanitize_filename(filename):
+    """
+    Sanitize a string to be used as a filename
+    Removes or replaces invalid characters
+    """
+    # Remove invalid characters for filenames
+    filename = re.sub(r'[<>:"/\\|?*]', '', filename)
+    # Replace spaces and multiple spaces with single underscore
+    filename = re.sub(r'\s+', '_', filename)
+    # Remove leading/trailing underscores and dots
+    filename = filename.strip('._')
+    # Limit length to 200 characters
+    if len(filename) > 200:
+        filename = filename[:200]
+    return filename if filename else "attack_layer"
+
 def extract_text_from_pdf(pdf_path):
     """
     Extract text content from a PDF file
@@ -445,7 +461,7 @@ def main():
     group.add_argument("--text", help="Direct text input containing threat intelligence")
     parser.add_argument("--score", type=int, default=5, help="Score to assign to found techniques (default: 5)")
     parser.add_argument("--title", help="Custom title for the Navigator layer (overrides automatic title)")
-    parser.add_argument("--output", default="attack_navigator_layer.json", help="Output file name (default: attack_navigator_layer.json)")
+    parser.add_argument("--output", default=None, help="Output file name (default: auto-generated from source)")
     parser.add_argument("--attack-version", type=int, default=18, help="MITRE ATT&CK version to use (default: 18)")
     parser.add_argument("--force-html-mode", action="store_true", help="Force HTML parsing mode (override auto-detection)")
     parser.add_argument("--force-text-mode", action="store_true", help="Force text parsing mode (override auto-detection)")
@@ -588,16 +604,35 @@ def main():
     # Override title if provided
     if args.title:
         source_info["title"] = args.title
-    
+
+    # Generate output filename if not provided
+    if args.output is None:
+        # Generate filename based on source
+        if args.file:
+            # Use the input filename without extension
+            base_name = os.path.splitext(os.path.basename(args.file))[0]
+            output_filename = f"{sanitize_filename(base_name)}.json"
+        elif args.url:
+            # Use the page title
+            base_name = source_info.get("title", "attack_layer")
+            output_filename = f"{sanitize_filename(base_name)}.json"
+        else:
+            # Text input - use default with timestamp
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_filename = f"attack_layer_{timestamp}.json"
+    else:
+        output_filename = args.output
+
     # Create Navigator JSON
     print(f"Found {len(found_items['techniques'])} techniques and {len(found_items['tactics'])} tactics. Creating Navigator layer...")
     navigator_json = create_navigator_json(found_items, args.score, source_info, args.attack_version)
-    
+
     # Write to file
-    with open(args.output, 'w', encoding='utf-8') as f:
+    with open(output_filename, 'w', encoding='utf-8') as f:
         json.dump(navigator_json, f, indent=2)
-    
-    print(f"Navigator layer saved to {args.output}")
+
+    print(f"Navigator layer saved to {output_filename}")
     
     # Output found techniques
     if found_items["techniques"]:
