@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import time
 import random
+import os
+from pypdf import PdfReader
 
 def get_mitre_attack_data(version=18):
     """
@@ -47,7 +49,8 @@ def parse_attack_data(data):
     """
     techniques = {}
     tactics = {}
-    
+    tactic_name_to_id = {}
+
     for obj in data.get("objects", []):
         # Extract techniques (attack-patterns)
         if obj.get("type") == "attack-pattern":
@@ -59,18 +62,25 @@ def parse_attack_data(data):
                             "name": obj.get("name", "Unknown"),
                             "tactic_refs": obj.get("kill_chain_phases", [])
                         }
-        
+
         # Extract tactics (x-mitre-tactic)
         elif obj.get("type") == "x-mitre-tactic":
             for ref in obj.get("external_references", []):
                 if ref.get("source_name") == "mitre-attack":
                     tactic_id = ref.get("external_id")
+                    tactic_name = obj.get("name", "Unknown")
                     if tactic_id:
                         tactics[tactic_id] = {
-                            "name": obj.get("name", "Unknown")
+                            "name": tactic_name
                         }
-    
-    return {"techniques": techniques, "tactics": tactics}
+                        # Create mapping from name to ID (case-insensitive)
+                        tactic_name_to_id[tactic_name.lower()] = tactic_id
+
+    return {
+        "techniques": techniques,
+        "tactics": tactics,
+        "tactic_name_to_id": tactic_name_to_id
+    }
 
 def fetch_url_content_and_detect_mode(url, attack_data):
     """
@@ -223,19 +233,26 @@ def fetch_url_content_and_detect_mode(url, attack_data):
         
         # Also extract from plain text as backup
         text_content = soup.get_text()
-        
+
         # Look for technique IDs in plain text
         for match in re.finditer(r'T\d{4}(?:\.\d{3})?', text_content):
             technique_id = match.group(0)
             if technique_id in attack_data["techniques"]:
                 found_techniques.add(technique_id)
-        
+
         # Look for tactic IDs in plain text
         for match in re.finditer(r'TA\d{4}', text_content):
             tactic_id = match.group(0)
             if tactic_id in attack_data["tactics"]:
                 found_tactics.add(tactic_id)
-                
+
+        # Look for tactic names in plain text (case-insensitive)
+        tactic_name_to_id = attack_data.get("tactic_name_to_id", {})
+        for tactic_name, tactic_id in tactic_name_to_id.items():
+            pattern = r'\b' + re.escape(tactic_name) + r'\b'
+            if re.search(pattern, text_content, re.IGNORECASE):
+                found_tactics.add(tactic_id)
+
         found_items = {
             "techniques": found_techniques,
             "tactics": found_tactics
@@ -265,27 +282,51 @@ def fetch_url_content_and_detect_mode(url, attack_data):
         "html_mode_used": html_mode_needed
     }
 
+def extract_text_from_pdf(pdf_path):
+    """
+    Extract text content from a PDF file
+    """
+    try:
+        reader = PdfReader(pdf_path)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        raise Exception(f"Error extracting text from PDF: {e}")
+
 def parse_text_for_identifiers(text, attack_data):
     """
     Parse text for MITRE ATT&CK technique IDs (T####, T####.###) and tactic IDs (TA####)
+    Also detects tactics by their names (e.g., "Initial Access", "Execution")
     """
     found_techniques = set()
     found_tactics = set()
-    
+
     # Look for technique IDs (e.g., T1566, T1566.001)
     technique_pattern = r'T\d{4}(?:\.\d{3})?'
     for match in re.finditer(technique_pattern, text):
         technique_id = match.group(0)
         if technique_id in attack_data["techniques"]:
             found_techniques.add(technique_id)
-    
+
     # Look for tactic IDs (e.g., TA0001)
     tactic_pattern = r'TA\d{4}'
     for match in re.finditer(tactic_pattern, text):
         tactic_id = match.group(0)
         if tactic_id in attack_data["tactics"]:
             found_tactics.add(tactic_id)
-    
+
+    # Look for tactic names (case-insensitive)
+    # Search for tactic names as whole words or in common heading patterns
+    tactic_name_to_id = attack_data.get("tactic_name_to_id", {})
+    for tactic_name, tactic_id in tactic_name_to_id.items():
+        # Use word boundaries to match whole tactic names
+        # Pattern matches tactic name as standalone or in common contexts like headings
+        pattern = r'\b' + re.escape(tactic_name) + r'\b'
+        if re.search(pattern, text, re.IGNORECASE):
+            found_tactics.add(tactic_id)
+
     return {"techniques": found_techniques, "tactics": found_tactics}
 
 def create_navigator_json(found_items, score, source_info=None, attack_version=18):
@@ -400,7 +441,7 @@ def main():
     parser = argparse.ArgumentParser(description="Extract MITRE ATT&CK TTPs from threat intelligence and create ATT&CK Navigator layer")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--url", help="URL of the threat intelligence blog/post")
-    group.add_argument("--file", help="Local file containing threat intelligence")
+    group.add_argument("--file", help="Local file containing threat intelligence (supports .txt, .pdf, and other text formats)")
     group.add_argument("--text", help="Direct text input containing threat intelligence")
     parser.add_argument("--score", type=int, default=5, help="Score to assign to found techniques (default: 5)")
     parser.add_argument("--title", help="Custom title for the Navigator layer (overrides automatic title)")
@@ -512,15 +553,22 @@ def main():
     elif args.file:
         print(f"Reading content from {args.file}...")
         try:
-            with open(args.file, 'r', encoding='utf-8') as f:
-                text = f.read()
-            
+            # Check if the file is a PDF
+            if args.file.lower().endswith('.pdf'):
+                print("Detected PDF file, extracting text...")
+                text = extract_text_from_pdf(args.file)
+                print(f"Successfully extracted text from PDF ({len(text)} characters)")
+            else:
+                # Read as plain text file
+                with open(args.file, 'r', encoding='utf-8') as f:
+                    text = f.read()
+
             # Parse for techniques and tactics
             print("Parsing for MITRE ATT&CK identifiers...")
             found_items = parse_text_for_identifiers(text, attack_data)
-            
+
             source_info = {
-                "title": args.file  # Use filename as title
+                "title": os.path.basename(args.file)  # Use filename as title
             }
         except Exception as e:
             print(f"Error reading file: {e}")
